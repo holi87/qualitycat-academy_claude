@@ -1,0 +1,11 @@
+{
+  "name": "@qualitycat-academy/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'TODO: setup dev server'",
+    "build": "echo 'TODO: setup build'",
+    "lint": "echo 'TODO: setup linter'",
+    "test": "echo 'TODO: setup tests'"
+  }
+}
