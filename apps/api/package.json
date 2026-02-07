@@ -6,6 +6,19 @@
     "dev": "echo 'TODO: setup dev server'",
     "build": "echo 'TODO: setup build'",
     "lint": "echo 'TODO: setup linter'",
-    "test": "echo 'TODO: setup tests'"
+    "test": "echo 'TODO: setup tests'",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.3.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.3.0"
   }
 }
