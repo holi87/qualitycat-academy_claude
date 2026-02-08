@@ -31,7 +31,7 @@ RUN pnpm --filter @qualitycat-academy/api deploy --prod /deploy
 FROM node:20-alpine
 
 RUN apk add --no-cache curl
-RUN npm install -g prisma
+RUN npm install -g prisma@6
 
 WORKDIR /app
 
@@ -44,7 +44,6 @@ COPY --from=build /app/apps/api/dist ./dist
 
 # Prisma schema (for migrations) + generated client
 COPY --from=build /app/apps/api/prisma ./prisma
-COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 
 # Entrypoint script
 COPY apps/api/entrypoint.sh ./entrypoint.sh

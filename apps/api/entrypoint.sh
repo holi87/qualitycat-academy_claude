@@ -1,8 +1,14 @@
 #!/bin/sh
 set -e
 
-echo "Running database migrations..."
-prisma migrate deploy
+echo "Applying database schema..."
+if [ -d "./prisma/migrations" ] && [ "$(find ./prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l)" -gt 0 ]; then
+  echo "Running Prisma migrations..."
+  prisma migrate deploy
+else
+  echo "No migration files found. Running prisma db push..."
+  prisma db push
+fi
 
 if [ "$RUN_SEED" = "1" ]; then
   echo "Seeding database..."

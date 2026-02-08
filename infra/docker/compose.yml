@@ -1,44 +1,98 @@
+name: academy-claude-prod
+
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ${ACADEMY_ENV_FILE:-./env.example}
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: qualitycat
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-qualitycat}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - academy_claude_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   api:
+    image: academy-claude-api:prod
     build:
       context: ../../
       dockerfile: apps/api/Dockerfile
-    ports:
-      - "8081:8081"
-    env_file: .env
+    restart: unless-stopped
+    env_file:
+      - ${ACADEMY_ENV_FILE:-./env.example}
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/qualitycat
+      NODE_ENV: production
+      PORT: "8081"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/qualitycat}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://academy-claude.qualitycat.com.pl}
+      RUN_SEED: ${RUN_SEED:-0}
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - default
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.academy-claude-api.rule=Host(`academy-claude.qualitycat.com.pl`) && PathPrefix(`/api`)
+      - traefik.http.routers.academy-claude-api.entrypoints=web
+      - traefik.http.routers.academy-claude-api.priority=100
+      - traefik.http.routers.academy-claude-api.middlewares=academy-claude-api-strip
+      - traefik.http.middlewares.academy-claude-api-strip.stripprefix.prefixes=/api
+      - traefik.http.services.academy-claude-api.loadbalancer.server.port=8081
+      - traefik.http.routers.academy-claude-docs.rule=Host(`academy-claude.qualitycat.com.pl`) && PathPrefix(`/docs`)
+      - traefik.http.routers.academy-claude-docs.entrypoints=web
+      - traefik.http.routers.academy-claude-docs.priority=110
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   web:
+    image: academy-claude-web:prod
     build:
       context: ../../
       dockerfile: apps/web/Dockerfile
       args:
-        VITE_API_URL: http://localhost:8081
-        VITE_BUGS: "off"
-    ports:
-      - "8080:8080"
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_BUGS: ${VITE_BUGS:-off}
+        VITE_BUG_UI_DOUBLE_SUBMIT: ${VITE_BUG_UI_DOUBLE_SUBMIT:-0}
+        VITE_BUG_CACHE_STALE: ${VITE_BUG_CACHE_STALE:-0}
+        VITE_BUG_TIMEZONE_SHIFT: ${VITE_BUG_TIMEZONE_SHIFT:-0}
+        VITE_BUG_ERROR_MESSAGE: ${VITE_BUG_ERROR_MESSAGE:-0}
+        VITE_BUG_FORM_VALIDATION: ${VITE_BUG_FORM_VALIDATION:-0}
+        VITE_BUG_XSS_DESCRIPTION: ${VITE_BUG_XSS_DESCRIPTION:-0}
+    restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    networks:
+      - default
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.academy-claude-web.rule=Host(`academy-claude.qualitycat.com.pl`)
+      - traefik.http.routers.academy-claude-web.entrypoints=web
+      - traefik.http.routers.academy-claude-web.priority=10
+      - traefik.http.services.academy-claude-web.loadbalancer.server.port=8080
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+networks:
+  proxy:
+    external: true
 
 volumes:
-  pgdata:
+  academy_claude_db_data:
