@@ -1,9 +1,88 @@
-# CI workflow placeholder
 name: CI
+
 on: [push, pull_request]
+
 jobs:
-  build:
+  lint-and-test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: qualitycat_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/qualitycat_test
+      JWT_SECRET: ci-test-secret
+      BUGS: "off"
+      NODE_ENV: test
+
     steps:
       - uses: actions/checkout@v4
-      - run: echo "TODO: setup CI"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        working-directory: apps/api
+        run: npx prisma generate
+
+      - name: Push schema to test DB
+        working-directory: apps/api
+        run: npx prisma db push --force-reset --skip-generate
+
+      - name: Seed test DB
+        working-directory: apps/api
+        run: pnpm db:seed
+
+      - name: Run API tests
+        working-directory: apps/api
+        run: pnpm test
+
+      - name: Build web
+        working-directory: apps/web
+        run: pnpm build
+
+      - name: Install Playwright browsers
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        working-directory: apps/web
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/qualitycat_test
+          JWT_SECRET: ci-test-secret
+          BUGS: "off"
+        run: |
+          cd ../api && pnpm dev &
+          npx wait-on http://localhost:8081/health --timeout 15000
+          pnpm test:e2e

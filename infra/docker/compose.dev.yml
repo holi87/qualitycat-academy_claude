@@ -1,2 +1,48 @@
-# Docker Compose — development overrides
-# TODO: define dev services
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: qualitycat
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install && pnpm dev"
+    volumes:
+      - ../../apps/api:/app
+      - api_node_modules:/app/node_modules
+    ports:
+      - "8081:8081"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/qualitycat
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install && pnpm dev --host"
+    volumes:
+      - ../../apps/web:/app
+      - web_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    env_file: .env
+
+volumes:
+  pgdata-dev:
+  api_node_modules:
+  web_node_modules:
